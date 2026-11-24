@@ -15,6 +15,9 @@ import {
   SubjectId,
   UnderstandingLevel,
   SubjectPlan,
+  MiniroomItem,
+  WardrobeItem,
+  TodoItem,
 } from "./types";
 import {
   initialUserSettings,
@@ -25,6 +28,8 @@ import {
   initialVillageState,
   initialAiMessages,
   initialSessions,
+  initialMiniroomItems,
+  initialWardrobeItems,
 } from "./sample-data";
 import { calculateNextReview, getTodayDateString } from "./spaced-repetition";
 import { soundManager } from "./sounds";
@@ -72,6 +77,19 @@ interface ForestStoreContextType {
   unlockDecoration: (id: string) => boolean;
   moveDecoration: (id: string, x: number, y: number) => void;
 
+  // Miniroom & Wardrobe
+  moveMiniroomItem: (id: string, x: number, y: number) => void;
+  togglePlaceMiniroomItem: (id: string) => void;
+  buyMiniroomItem: (id: string) => boolean;
+  buyWardrobeItem: (id: string) => boolean;
+  equipOutfit: (id: string) => void;
+  moveAvatar: (x: number, y: number) => void;
+
+  // Planner Todos
+  addTodo: (todo: Omit<TodoItem, "id">) => void;
+  toggleTodo: (id: string) => void;
+  deleteTodo: (id: string) => void;
+
   addAiMessage: (msg: Omit<AiCoachMessage, "id" | "date" | "createdAt">) => void;
 
   exportBackup: () => string;
@@ -100,13 +118,25 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.settings) setSettings(parsed.settings);
+        if (parsed.settings) {
+          const userName = parsed.settings.userName === "순경합격이" ? "홍길동" : (parsed.settings.userName || "홍길동");
+          const villageName = parsed.settings.villageName === "푸른 순경마을" ? "푸른마을" : (parsed.settings.villageName || "푸른마을");
+          setSettings({
+            ...parsed.settings,
+            userName,
+            villageName,
+            equippedOutfit: parsed.settings.equippedOutfit || "student_hoodie",
+            avatarPos: parsed.settings.avatarPos || { x: 50, y: 65 },
+          });
+        }
         if (parsed.schedules) setSchedules(parsed.schedules);
         if (parsed.todayPlan) {
-          // If saved plan is for a different day, initialize a fresh todayPlan while preserving structure
           const today = getTodayDateString();
           if (parsed.todayPlan.date === today) {
-            setTodayPlan(parsed.todayPlan);
+            setTodayPlan({
+              ...parsed.todayPlan,
+              todos: parsed.todayPlan.todos || getInitialTodayPlan().todos,
+            });
           } else {
             setTodayPlan(getInitialTodayPlan());
           }
@@ -124,6 +154,10 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
           setVillage({
             ...parsed.village,
             decorations: normalizedDecs,
+            miniroomItems: parsed.village.miniroomItems || initialVillageState.miniroomItems,
+            wardrobe: parsed.village.wardrobe || initialVillageState.wardrobe,
+            equippedOutfit: parsed.village.equippedOutfit || "student_hoodie",
+            avatarPos: parsed.village.avatarPos || { x: 50, y: 65 },
           });
         }
         if (parsed.aiMessages) setAiMessages(parsed.aiMessages);
@@ -437,6 +471,127 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
     soundManager.playPop();
   }, []);
 
+  // Miniroom & Wardrobe
+  const moveMiniroomItem = useCallback((id: string, x: number, y: number) => {
+    setVillage((prev) => ({
+      ...prev,
+      miniroomItems: (prev.miniroomItems || []).map((item) =>
+        item.id === id ? { ...item, x: Math.max(5, Math.min(95, x)), y: Math.max(10, Math.min(90, y)), placed: true } : item
+      ),
+    }));
+    soundManager.playPop();
+  }, []);
+
+  const togglePlaceMiniroomItem = useCallback((id: string) => {
+    setVillage((prev) => ({
+      ...prev,
+      miniroomItems: (prev.miniroomItems || []).map((item) =>
+        item.id === id ? { ...item, placed: !item.placed } : item
+      ),
+    }));
+    soundManager.playPop();
+  }, []);
+
+  const buyMiniroomItem = useCallback((id: string): boolean => {
+    let success = false;
+    setVillage((prev) => {
+      const item = (prev.miniroomItems || []).find((i) => i.id === id);
+      if (!item || item.unlocked || prev.coins < item.costBells) return prev;
+      success = true;
+      soundManager.playLevelUp();
+      return {
+        ...prev,
+        coins: prev.coins - item.costBells,
+        miniroomItems: (prev.miniroomItems || []).map((i) =>
+          i.id === id ? { ...i, unlocked: true, placed: true } : i
+        ),
+        recentUnlocks: [`${item.name} 가구 구매!`, ...prev.recentUnlocks.slice(0, 4)],
+      };
+    });
+    return success;
+  }, []);
+
+  const buyWardrobeItem = useCallback((id: string): boolean => {
+    let success = false;
+    setVillage((prev) => {
+      const item = (prev.wardrobe || []).find((w) => w.id === id);
+      if (!item || item.unlocked || prev.coins < item.costBells) return prev;
+      success = true;
+      soundManager.playLevelUp();
+      return {
+        ...prev,
+        coins: prev.coins - item.costBells,
+        wardrobe: (prev.wardrobe || []).map((w) =>
+          w.id === id ? { ...w, unlocked: true } : w
+        ),
+        recentUnlocks: [`${item.name} 의상 구매!`, ...prev.recentUnlocks.slice(0, 4)],
+      };
+    });
+    return success;
+  }, []);
+
+  const equipOutfit = useCallback((id: string) => {
+    setVillage((prev) => ({
+      ...prev,
+      equippedOutfit: id,
+    }));
+    setSettings((prev) => ({
+      ...prev,
+      equippedOutfit: id,
+    }));
+    soundManager.playChime();
+  }, []);
+
+  const moveAvatar = useCallback((x: number, y: number) => {
+    const clampedX = Math.max(10, Math.min(90, x));
+    const clampedY = Math.max(20, Math.min(85, y));
+    setVillage((prev) => ({
+      ...prev,
+      avatarPos: { x: clampedX, y: clampedY },
+    }));
+    setSettings((prev) => ({
+      ...prev,
+      avatarPos: { x: clampedX, y: clampedY },
+    }));
+  }, []);
+
+  // Planner Todos
+  const addTodo = useCallback((todo: Omit<TodoItem, "id">) => {
+    const newTodo: TodoItem = {
+      ...todo,
+      id: `todo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    };
+    setTodayPlan((prev) => ({
+      ...prev,
+      todos: [newTodo, ...(prev.todos || [])],
+    }));
+    soundManager.playPop();
+  }, []);
+
+  const toggleTodo = useCallback((id: string) => {
+    setTodayPlan((prev) => {
+      const nextTodos = (prev.todos || []).map((t) => {
+        if (t.id !== id) return t;
+        const nextDone = !t.completed;
+        if (nextDone) {
+          soundManager.playChime();
+        } else {
+          soundManager.playClick();
+        }
+        return { ...t, completed: nextDone };
+      });
+      return { ...prev, todos: nextTodos };
+    });
+  }, []);
+
+  const deleteTodo = useCallback((id: string) => {
+    setTodayPlan((prev) => ({
+      ...prev,
+      todos: (prev.todos || []).filter((t) => t.id !== id),
+    }));
+    soundManager.playClick();
+  }, []);
+
   const addAiMessage = useCallback((msg: Omit<AiCoachMessage, "id" | "date" | "createdAt">) => {
     const today = getTodayDateString();
     const newMsg: AiCoachMessage = {
@@ -543,6 +698,15 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
       awardXp,
       unlockDecoration,
       moveDecoration,
+      moveMiniroomItem,
+      togglePlaceMiniroomItem,
+      buyMiniroomItem,
+      buyWardrobeItem,
+      equipOutfit,
+      moveAvatar,
+      addTodo,
+      toggleTodo,
+      deleteTodo,
       addAiMessage,
       exportBackup,
       importBackup,
@@ -576,6 +740,15 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
       awardXp,
       unlockDecoration,
       moveDecoration,
+      moveMiniroomItem,
+      togglePlaceMiniroomItem,
+      buyMiniroomItem,
+      buyWardrobeItem,
+      equipOutfit,
+      moveAvatar,
+      addTodo,
+      toggleTodo,
+      deleteTodo,
       addAiMessage,
       exportBackup,
       importBackup,

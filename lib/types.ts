@@ -29,14 +29,25 @@ export type MistakeCause =
 
 export interface UserSettings {
   examDate: string; // "2027-03-20"
-  userName: string;
-  villageName: string;
+  userName: string; // "홍길동"
+  villageName: string; // "푸른마을"
   dailyTargetMinutes: number; // 180
   busyDayMinMinutes: number; // 60
   soundEnabled: boolean;
   penOnlyMode: boolean;
+  equippedOutfit?: string; // e.g. "uniform", "hoodie", "vest", "police_trial"
+  avatarPos?: { x: number; y: number }; // Cyworld miniroom avatar coordinates %
   supabaseUrl?: string;
   supabaseAnonKey?: string;
+}
+
+export interface TodoItem {
+  id: string;
+  title: string;
+  subjectId: SubjectId;
+  estimatedMinutes: number;
+  completed: boolean;
+  category: "lecture" | "problem" | "review" | "memorize" | "custom";
 }
 
 export interface FixedSchedule {
@@ -67,6 +78,7 @@ export interface DailyStudyPlan {
   targetTier: "minimum" | "standard" | "extended"; // 60m, 180m, custom
   totalTargetMinutes: number;
   subjects: Record<SubjectId, SubjectPlan>;
+  todos?: TodoItem[]; // 투두리스트 형식 항목들
   notes?: string;
   dayReviewCompleted?: boolean;
 }
@@ -102,8 +114,11 @@ export interface ReviewItem {
   topic: string;
   textbookName: string;
   problemNumber: string;
-  problemImageUrl?: string; // Data URL or storage URL
-  solutionImageUrl?: string;
+  problemImageUrl?: string; // Data URL or storage URL (문제/지문 영역)
+  optionsImageUrl?: string; // 선지 ①~④ 분리 이미지
+  problemText?: string;     // 문제 지문 텍스트
+  optionsList?: string[];   // [①번 선지, ②번 선지, ③번 선지, ④번 선지] 분리 텍스트
+  solutionImageUrl?: string;// 해설 이미지
   selectedAnswer?: string;
   correctAnswer?: string;
   causeTags: MistakeCause[];
@@ -200,6 +215,30 @@ export interface VillageDecorationItem {
   costXp: number;
 }
 
+export interface MiniroomItem {
+  id: string;
+  type: "desk" | "chair" | "bookshelf" | "bed" | "rug" | "lamp" | "plant" | "poster" | "window" | "teddy_bear" | "police_cap_stand";
+  name: string;
+  x: number; // 0-100 percentage in miniroom
+  y: number; // 0-100 percentage in miniroom
+  unlocked: boolean;
+  placed: boolean;
+  costBells: number;
+  category: "furniture" | "wall" | "rug" | "prop";
+  icon: string;
+}
+
+export interface WardrobeItem {
+  id: string;
+  name: string;
+  category: "outfit" | "hair" | "accessory";
+  unlocked: boolean;
+  costBells: number;
+  description: string;
+  icon: string;
+  color: string;
+}
+
 export interface VillageState {
   level: number;
   totalXp: number;
@@ -207,6 +246,10 @@ export interface VillageState {
   buildings: Record<SubjectId, VillageBuilding>;
   characters: Record<SubjectId, VillageCharacter>;
   decorations: VillageDecorationItem[];
+  miniroomItems: MiniroomItem[];
+  wardrobe: WardrobeItem[];
+  equippedOutfit: string;
+  avatarPos: { x: number; y: number };
   recentUnlocks: string[];
 }
 
