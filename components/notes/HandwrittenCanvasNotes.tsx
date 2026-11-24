@@ -45,6 +45,7 @@ export function HandwrittenCanvasNotes() {
   // Canvas ref
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isDrawingRef = useRef(false);
+  const pointerRef = useRef<number | null>(null);
   const currentStrokeRef = useRef<StrokePoint[]>([]);
 
   // Active Note
@@ -117,7 +118,7 @@ export function HandwrittenCanvasNotes() {
     // Draw strokes
     const strokesToDraw = currentPage?.strokes || [];
     for (const stroke of strokesToDraw) {
-      if (stroke.points.length < 2) continue;
+      if (!stroke.points.length) continue;
 
       ctx.save();
       ctx.lineCap = "round";
@@ -145,6 +146,7 @@ export function HandwrittenCanvasNotes() {
         const pt = stroke.points[i];
         ctx.lineTo(pt.x, pt.y);
       }
+      if (stroke.points.length === 1) ctx.lineTo(stroke.points[0].x + 0.01, stroke.points[0].y);
       ctx.stroke();
       ctx.restore();
     }
@@ -162,7 +164,7 @@ export function HandwrittenCanvasNotes() {
     const parent = canvas.parentElement;
     if (!parent) return;
 
-    const w = parent.clientWidth || 800;
+    const w = currentPage?.canvasWidth || parent.clientWidth || 800;
     const h = 720;
     canvas.width = w;
     canvas.height = h;
@@ -171,6 +173,7 @@ export function HandwrittenCanvasNotes() {
 
   // Pointer Events handling with Apple Pencil support
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!currentPage || !currentNote || pointerRef.current !== null || e.button !== 0) return;
     // Pen-only mode enforcement
     if (settings.penOnlyMode && e.pointerType !== "pen") {
       return;
@@ -179,10 +182,11 @@ export function HandwrittenCanvasNotes() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) * canvas.width / rect.width;
+    const y = (e.clientY - rect.top) * canvas.height / rect.height;
     const pressure = e.pressure || 0.5;
 
+    pointerRef.current = e.pointerId;
     isDrawingRef.current = true;
     currentStrokeRef.current = [{ x, y, pressure }];
     canvas.setPointerCapture(e.pointerId);
@@ -195,14 +199,14 @@ export function HandwrittenCanvasNotes() {
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current) return;
+    if (!isDrawingRef.current || pointerRef.current !== e.pointerId) return;
     if (settings.penOnlyMode && e.pointerType !== "pen") return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) * canvas.width / rect.width;
+    const y = (e.clientY - rect.top) * canvas.height / rect.height;
     const pressure = e.pressure || 0.5;
 
     currentStrokeRef.current.push({ x, y, pressure });
@@ -243,8 +247,9 @@ export function HandwrittenCanvasNotes() {
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current) return;
+    if (!isDrawingRef.current || pointerRef.current !== e.pointerId) return;
     isDrawingRef.current = false;
+    pointerRef.current = null;
 
     if (currentStrokeRef.current.length > 0 && currentNote && currentPage) {
       const newStroke: Stroke = {
@@ -256,7 +261,7 @@ export function HandwrittenCanvasNotes() {
 
       const updatedStrokes = [...currentPage.strokes, newStroke];
       const updatedPages = currentNote.pages.map((p) =>
-        p.id === currentPage.id ? { ...p, strokes: updatedStrokes } : p
+        p.id === currentPage.id ? { ...p, canvasWidth: canvasRef.current?.width, strokes: updatedStrokes } : p
       );
 
       saveNote({
@@ -266,6 +271,13 @@ export function HandwrittenCanvasNotes() {
 
       currentStrokeRef.current = [];
     }
+  };
+
+  useEffect(() => { setUndoStack([]); setRedoStack([]); pointerRef.current = null; isDrawingRef.current = false; }, [currentPage?.id]);
+
+  const changeTemplate = (value: "grid" | "lined" | "blank") => {
+    setTemplate(value);
+    if (currentNote && currentPage) saveNote({...currentNote, pages: currentNote.pages.map(p => p.id === currentPage.id ? {...p, template: value} : p)});
   };
 
   // Undo / Redo
@@ -368,11 +380,11 @@ export function HandwrittenCanvasNotes() {
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-black text-forest-text">손필기 노트</h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800">
-              iPad Air 11" & Apple Pencil 최적화
+              iPad · Apple Pencil 지원
             </span>
           </div>
           <p className="text-xs text-forest-text-muted mt-0.5">
-            포인터 이벤트 기반 백지 복습 및 오답 필기 (팜 리젝션 & 벡터 스트로크 영구 보관)
+            포인터 이벤트 기반 백지 복습 및 오답 필기 (펜 전용 모드 · 브라우저 저장)
           </p>
         </div>
 
@@ -425,6 +437,7 @@ export function HandwrittenCanvasNotes() {
           </div>
 
           <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
+            {!notes.length && <p className="text-xs text-forest-text-muted">위의 과목별 + 버튼으로 새 노트를 만들어 주세요.</p>}
             {notes.map((n) => {
               const isSelected = n.id === activeNoteId;
               const sub = SUBJECTS[n.subjectId];
@@ -541,11 +554,11 @@ export function HandwrittenCanvasNotes() {
             <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-forest-border">
               <button
                 onClick={() => {
-                  setTemplate("grid");
+                  changeTemplate("grid");
                   soundManager.playClick();
                 }}
                 className={`p-1.5 rounded-lg text-xs flex items-center gap-1 ${
-                  template === "grid" ? "bg-forest-pink/20 text-forest-pink-dark font-bold" : "text-forest-text-muted"
+                  (currentPage?.template || template) === "grid" ? "bg-forest-pink/20 text-forest-pink-dark font-bold" : "text-forest-text-muted"
                 }`}
                 title="모눈 노트"
               >
@@ -554,11 +567,11 @@ export function HandwrittenCanvasNotes() {
               </button>
               <button
                 onClick={() => {
-                  setTemplate("lined");
+                  changeTemplate("lined");
                   soundManager.playClick();
                 }}
                 className={`p-1.5 rounded-lg text-xs flex items-center gap-1 ${
-                  template === "lined" ? "bg-forest-pink/20 text-forest-pink-dark font-bold" : "text-forest-text-muted"
+                  (currentPage?.template || template) === "lined" ? "bg-forest-pink/20 text-forest-pink-dark font-bold" : "text-forest-text-muted"
                 }`}
                 title="줄 노트"
               >
@@ -567,11 +580,11 @@ export function HandwrittenCanvasNotes() {
               </button>
               <button
                 onClick={() => {
-                  setTemplate("blank");
+                  changeTemplate("blank");
                   soundManager.playClick();
                 }}
                 className={`p-1.5 rounded-lg text-xs flex items-center gap-1 ${
-                  template === "blank" ? "bg-forest-pink/20 text-forest-pink-dark font-bold" : "text-forest-text-muted"
+                  (currentPage?.template || template) === "blank" ? "bg-forest-pink/20 text-forest-pink-dark font-bold" : "text-forest-text-muted"
                 }`}
                 title="무제 노트"
               >
@@ -614,8 +627,9 @@ export function HandwrittenCanvasNotes() {
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
+              onLostPointerCapture={handlePointerUp}
               className="w-full cursor-crosshair block"
-              style={{ touchAction: "none" }}
+              style={{ touchAction: "none", height: "auto" }}
             />
           </div>
 

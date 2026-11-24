@@ -16,7 +16,8 @@ export function calculateNextReview(
   currentDateStr: string,
   understanding: UnderstandingLevel,
   currentStage: number = 1,
-  isCorrect?: boolean
+  isCorrect?: boolean,
+  examDateStr: string = EXAM_DATE
 ): SpacedRepetitionResult {
   const baseDate = new Date(currentDateStr);
   let days = 1;
@@ -43,17 +44,17 @@ export function calculateNextReview(
 
   // Calculate target date
   const targetDate = new Date(baseDate);
-  targetDate.setDate(targetDate.getDate() + days);
+  targetDate.setUTCDate(targetDate.getUTCDate() + days);
 
   // Clamp before or at exam date (2027-03-20)
-  const examDate = new Date(EXAM_DATE);
-  if (targetDate > examDate) {
+  const examDate = new Date(examDateStr);
+  if (targetDate > examDate && examDate >= baseDate) {
     targetDate.setTime(examDate.getTime());
   }
 
-  const yyyy = targetDate.getFullYear();
-  const mm = String(targetDate.getMonth() + 1).padStart(2, "0");
-  const dd = String(targetDate.getDate()).padStart(2, "0");
+  const yyyy = targetDate.getUTCFullYear();
+  const mm = String(targetDate.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(targetDate.getUTCDate()).padStart(2, "0");
 
   return {
     nextReviewDate: `${yyyy}-${mm}-${dd}`,
@@ -67,22 +68,17 @@ export function calculateNextReview(
  * Format date to YYYY-MM-DD in local time
  */
 export function getTodayDateString(): string {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return new Intl.DateTimeFormat("sv-SE", {timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
 }
 
 /**
  * Calculate D-Day from a target date
  */
 export function calculateDDay(targetDateStr: string = EXAM_DATE): { days: number; text: string } {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = new Date(getTodayDateString());
 
   const target = new Date(targetDateStr);
-  target.setHours(0, 0, 0, 0);
+
 
   const diffTime = target.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

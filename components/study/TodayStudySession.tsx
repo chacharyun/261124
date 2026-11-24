@@ -65,8 +65,8 @@ export function TodayStudySession({
   const [outputChecks, setOutputChecks] = useState<string[]>([]);
 
   // Feedback form state
-  const [attemptedCount, setAttemptedCount] = useState<number>(20);
-  const [correctCount, setCorrectCount] = useState<number>(16);
+  const [attemptedCount, setAttemptedCount] = useState<number>(0);
+  const [correctCount, setCorrectCount] = useState<number>(0);
   const [confusingConceptText, setConfusingConceptText] = useState("");
   const [studyNotes, setStudyNotes] = useState("");
 
@@ -124,6 +124,8 @@ export function TodayStudySession({
   };
 
   const handleCompleteSession = () => {
+    if (seconds <= 0) { alert("공부 타이머를 먼저 시작해 주세요."); return; }
+    if (correctCount > attemptedCount || correctCount < 0 || attemptedCount < 0) { alert("풀이 수와 정답 수를 확인해 주세요."); return; }
     const durationMinutes = Math.max(1, Math.round(seconds / 60));
     const today = getTodayDateString();
 
@@ -158,7 +160,9 @@ export function TodayStudySession({
       actualMinutes: (subjectPlan.actualMinutes || 0) + durationMinutes,
       completed: true,
     });
-    toggleSubjectComplete(selectedSubject);
+    setSeconds(0);
+    setAttemptedCount(0);
+    setCorrectCount(0);
 
     // Play victory sound
     soundManager.playLevelUp();
@@ -178,6 +182,7 @@ export function TodayStudySession({
             <button
               key={subId}
               onClick={() => {
+                if (subId !== selectedSubject && seconds > 0) { alert("현재 공부를 저장하거나 타이머를 초기화한 뒤 과목을 변경해 주세요."); return; }
                 setSelectedSubject(subId);
                 soundManager.playClick();
               }}

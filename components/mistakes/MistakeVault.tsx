@@ -78,6 +78,8 @@ export function MistakeVault({
       }
       soundManager.playPop();
     };
+    reader.onerror = () => alert("사진을 읽지 못했습니다. 다시 선택해 주세요.");
+    if (!file.type.startsWith("image/")) { alert("이미지 파일을 선택해 주세요."); return; }
     reader.readAsDataURL(file);
   };
 
@@ -97,13 +99,13 @@ export function MistakeVault({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!problemNumber.trim()) return;
+    if (!problemNumber.trim() && !problemImgUrl) { alert("문제 사진 또는 문제 번호를 입력해 주세요."); return; }
 
     addReviewItem({
       subjectId: subject,
       topic: topic || availableTopics[0] || "전체 단원",
       textbookName: textbookName || "경찰 기출문제집",
-      problemNumber: problemNumber.includes("번") ? problemNumber : `${problemNumber}번`,
+      problemNumber: !problemNumber.trim() ? "사진 문제" : problemNumber.includes("번") ? problemNumber : `${problemNumber}번`,
       problemImageUrl: problemImgUrl || undefined,
       solutionImageUrl: solutionImgUrl || undefined,
       selectedAnswer: selectedAnswer || undefined,
@@ -281,7 +283,7 @@ export function MistakeVault({
                 <label className="block font-bold text-forest-text-muted mb-1">문제 번호 *</label>
                 <input
                   type="text"
-                  required
+                  required={!problemImgUrl}
                   value={problemNumber}
                   onChange={(e) => setProblemNumber(e.target.value)}
                   placeholder="예: 142번"

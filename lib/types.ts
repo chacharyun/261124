@@ -156,6 +156,7 @@ export interface Stroke {
 }
 
 export interface NotePage {
+  canvasWidth?: number;
   id: string;
   pageNumber: number;
   template: "blank" | "lined" | "grid" | "problem";

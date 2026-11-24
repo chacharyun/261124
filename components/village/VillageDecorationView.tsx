@@ -71,6 +71,7 @@ export function VillageDecorationView() {
       }
 
       moveDecoration(selectedDecoration.id, x, y);
+      setSelectedDecoration({...selectedDecoration, x, y});
       setIsMoveMode(false);
       soundManager.playChime();
       setStatusMessage(`🌸 [${selectedDecoration.name}] 위치를 (${x + 1}열, ${y + 1}행)으로 이동했습니다!`);

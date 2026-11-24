@@ -24,6 +24,7 @@ import {
 export function GardenOfPlans({ onNavigateToStudy }: { onNavigateToStudy?: () => void }) {
   const {
     todayPlan,
+    planHistory,
     schedules,
     settings,
     updateTodayPlan,
@@ -58,12 +59,13 @@ export function GardenOfPlans({ onNavigateToStudy }: { onNavigateToStudy?: () =>
       const [eh, em] = curr.endTime.split(":").map(Number);
       return acc + (eh + em / 60 - (sh + sm / 60));
     }, 0);
-    return Math.max(1, Math.round((14 - busyHours) * 10) / 10);
+    return Math.max(0, Math.round((14 - busyHours) * 10) / 10);
   });
 
   const handleAddScheduleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newScheduleTitle.trim()) return;
+    if (newScheduleEnd <= newScheduleStart) { alert("종료 시간은 시작 시간보다 늦어야 합니다."); return; }
     addSchedule({
       title: newScheduleTitle,
       dayOfWeek: newScheduleDay,
@@ -159,6 +161,7 @@ export function GardenOfPlans({ onNavigateToStudy }: { onNavigateToStudy?: () =>
       {/* 1. DAILY PLANNER TAB */}
       {activeSubTab === "daily" && (
         <div className="space-y-6">
+          {Object.keys(planHistory).length > 0 && <details className="bg-white rounded-2xl p-4 border border-forest-border"><summary className="font-bold cursor-pointer">지난 공부 계획 보기</summary>{Object.values(planHistory).sort((a,b)=>b.date.localeCompare(a.date)).map(plan => <details key={plan.date} className="mt-2"><summary>{plan.date} · {Object.values(plan.subjects).reduce((n,p)=>n+p.actualMinutes,0)}분</summary>{Object.values(plan.subjects).map(p=><p key={p.subjectId} className="text-sm">{SUBJECTS[p.subjectId].nameKr}: {p.scope || "미입력"} · {p.actualMinutes}분</p>)}</details>)}</details>}
           {/* Daily Goal Tier Selector (최소 60분 / 기본 180분 / 추가 목표) */}
           <div className="bg-white rounded-3xl p-5 border border-forest-border shadow-soft flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>

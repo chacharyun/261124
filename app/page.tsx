@@ -16,7 +16,7 @@ import { useForestStore } from "@/lib/store";
 import { Sparkles, Loader2 } from "lucide-react";
 
 export default function Home() {
-  const { isLoaded } = useForestStore();
+  const { isLoaded, storageError } = useForestStore();
   const [activeTab, setActiveTab] = useState<string>("village");
   const [isQuickMistakeModalOpen, setIsQuickMistakeModalOpen] = useState(false);
 
@@ -39,6 +39,7 @@ export default function Home() {
 
   return (
     <AppLayout activeTab={activeTab} onSelectTab={setActiveTab}>
+      {storageError && <div role="alert" className="bg-rose-50 text-rose-800 p-3 rounded-xl mb-3">{storageError}</div>}
       {activeTab === "village" && (
         <VillageDashboard
           onNavigate={setActiveTab}

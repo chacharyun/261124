@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   DailyStudyPlan,
   FixedSchedule,
@@ -39,6 +39,8 @@ const STORAGE_KEY = "pass_forest_data_v1";
 
 interface ForestStoreContextType {
   isLoaded: boolean;
+  storageError: string;
+  planHistory: Record<string, DailyStudyPlan>;
   settings: UserSettings;
   schedules: FixedSchedule[];
   todayPlan: DailyStudyPlan;
@@ -101,15 +103,19 @@ const ForestStoreContext = createContext<ForestStoreContextType | null>(null);
 
 export function ForestStoreProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
+  const [storageError, setStorageError] = useState("");
+  const loadFailed = useRef(false);
+  const xpKeys = useRef(new Set<string>());
+  const [planHistory, setPlanHistory] = useState<Record<string, DailyStudyPlan>>({});
   const [settings, setSettings] = useState<UserSettings>(initialUserSettings);
-  const [schedules, setSchedules] = useState<FixedSchedule[]>(initialSchedules);
+  const [schedules, setSchedules] = useState<FixedSchedule[]>([]);
   const [todayPlan, setTodayPlan] = useState<DailyStudyPlan>(getInitialTodayPlan());
-  const [sessions, setSessions] = useState<StudySession[]>(initialSessions);
-  const [reviewItems, setReviewItems] = useState<ReviewItem[]>(initialReviewItems);
+  const [sessions, setSessions] = useState<StudySession[]>([]);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [reviewAttempts, setReviewAttempts] = useState<ReviewAttempt[]>([]);
-  const [notes, setNotes] = useState<HandwrittenNote[]>(initialNotes);
+  const [notes, setNotes] = useState<HandwrittenNote[]>([]);
   const [village, setVillage] = useState<VillageState>(initialVillageState);
-  const [aiMessages, setAiMessages] = useState<AiCoachMessage[]>(initialAiMessages);
+  const [aiMessages, setAiMessages] = useState<AiCoachMessage[]>([]);
   const [xpTransactions, setXpTransactions] = useState<XpTransaction[]>([]);
 
   // Load state from localStorage on client mount
@@ -130,6 +136,7 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
           });
         }
         if (parsed.schedules) setSchedules(parsed.schedules);
+        if (parsed.planHistory) setPlanHistory(parsed.planHistory);
         if (parsed.todayPlan) {
           const today = getTodayDateString();
           if (parsed.todayPlan.date === today) {
@@ -138,6 +145,7 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
               todos: parsed.todayPlan.todos || getInitialTodayPlan().todos,
             });
           } else {
+            setPlanHistory(prev => ({...prev, [parsed.todayPlan.date]: parsed.todayPlan}));
             setTodayPlan(getInitialTodayPlan());
           }
         }
@@ -161,9 +169,11 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
           });
         }
         if (parsed.aiMessages) setAiMessages(parsed.aiMessages);
-        if (parsed.xpTransactions) setXpTransactions(parsed.xpTransactions);
+        if (parsed.xpTransactions) { setXpTransactions(parsed.xpTransactions); xpKeys.current = new Set(parsed.xpTransactions.map((t: XpTransaction) => t.idempotencyKey)); }
       }
     } catch (e) {
+      loadFailed.current = true;
+      setStorageError("기존 기록을 읽지 못했습니다. 원본을 보호하기 위해 자동 저장을 중단했습니다.");
       console.error("Failed to load local storage data:", e);
     } finally {
       setIsLoaded(true);
@@ -172,12 +182,13 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
 
   // Save to localStorage when state changes
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || loadFailed.current) return;
     try {
       const payload = {
         settings,
         schedules,
         todayPlan,
+        planHistory,
         sessions,
         reviewItems,
         reviewAttempts,
@@ -187,7 +198,9 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
         xpTransactions,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      setStorageError("");
     } catch (e) {
+      setStorageError("저장 실패: 브라우저 저장 공간 또는 권한을 확인하고 설정에서 백업을 내려받으세요.");
       console.error("Failed to persist data:", e);
     }
   }, [
@@ -195,6 +208,7 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
     settings,
     schedules,
     todayPlan,
+    planHistory,
     sessions,
     reviewItems,
     reviewAttempts,
@@ -203,6 +217,19 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
     aiMessages,
     xpTransactions,
   ]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    const check = () => {
+      if (todayPlan.date !== getTodayDateString()) {
+        setPlanHistory(prev => ({...prev, [todayPlan.date]: todayPlan}));
+        setTodayPlan(getInitialTodayPlan());
+      }
+    };
+    const timer = window.setInterval(check, 30000);
+    window.addEventListener("focus", check);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", check); };
+  }, [isLoaded, todayPlan]);
 
   // Sync sound setting
   useEffect(() => {
@@ -250,25 +277,14 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
   // Award XP with idempotency check to avoid repeat exploitation
   const awardXp = useCallback(
     (type: keyof typeof XP_REWARDS, idempotencyKey: string, subjectId?: SubjectId): boolean => {
-      let isAlreadyAwarded = false;
-      setXpTransactions((prev) => {
-        if (prev.some((tx) => tx.idempotencyKey === idempotencyKey)) {
-          isAlreadyAwarded = true;
-          return prev;
-        }
-        const rule = XP_REWARDS[type];
-        const newTx: XpTransaction = {
-          id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          idempotencyKey,
-          activityType: type,
-          xpAwarded: rule.xp,
-          subjectId,
-          timestamp: new Date().toISOString(),
-        };
-        return [newTx, ...prev];
-      });
-
-      if (isAlreadyAwarded) return false;
+      if (xpKeys.current.has(idempotencyKey)) return false;
+      xpKeys.current.add(idempotencyKey);
+      const newTx: XpTransaction = {
+        id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        idempotencyKey, activityType: type, xpAwarded: XP_REWARDS[type].xp,
+        subjectId, timestamp: new Date().toISOString(),
+      };
+      setXpTransactions(prev => [newTx, ...prev]);
 
       const rule = XP_REWARDS[type];
       setVillage((prev) => {
@@ -302,6 +318,7 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
           coins: newCoins,
           level: newLevel,
           buildings: updatedBuildings,
+          characters: subjectId ? {...prev.characters, [subjectId]: {...prev.characters[subjectId], level: updatedBuildings[subjectId].level}} : prev.characters,
         };
       });
 
@@ -326,22 +343,19 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
           },
         };
 
-        if (next) {
-          const today = getTodayDateString();
-          awardXp("subject_complete", `subject_complete_${subjectId}_${today}`, subjectId);
-
-          // Check if all 3 subjects are completed today!
-          const allDone = Object.values(updated.subjects).every((s) => s.completed);
-          if (allDone) {
-            awardXp("all_three_complete", `all_three_complete_${today}`);
-          }
-        }
-
         return updated;
       });
     },
-    [awardXp]
+    []
   );
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    for (const sub of Object.values(todayPlan.subjects)) {
+      if (sub.completed) awardXp("subject_complete", `subject_complete_${sub.subjectId}_${todayPlan.date}`, sub.subjectId);
+    }
+    if (Object.values(todayPlan.subjects).every(sub => sub.completed)) awardXp("all_three_complete", `all_three_complete_${todayPlan.date}`);
+  }, [isLoaded, todayPlan, awardXp]);
 
   const addStudySession = useCallback(
     (session: StudySession) => {
@@ -359,7 +373,7 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
   const addReviewItem = useCallback(
     (item: Omit<ReviewItem, "id" | "registeredDate" | "nextReviewDate" | "reviewStage" | "reviewCount" | "overcome">): ReviewItem => {
       const today = getTodayDateString();
-      const nextReview = calculateNextReview(today, item.understanding, 1);
+      const nextReview = calculateNextReview(today, item.understanding, 1, undefined, settings.examDate);
       const newItem: ReviewItem = {
         ...item,
         id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -374,7 +388,7 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
       soundManager.playPop();
       return newItem;
     },
-    []
+    [settings.examDate]
   );
 
   const deleteReviewItem = useCallback((id: string) => {
@@ -385,15 +399,15 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
   const recordReviewAttempt = useCallback(
     (itemId: string, understanding: UnderstandingLevel, isCorrect?: boolean, spentSeconds: number = 30) => {
       const today = getTodayDateString();
-      let targetSubjectId: SubjectId | undefined;
-      let wasOvercome = false;
+      const target = reviewItems.find(item => item.id === itemId);
+      if (!target) return;
+      const targetSubjectId = target.subjectId;
+      const wasOvercome = calculateNextReview(today, understanding, target.reviewStage, isCorrect, settings.examDate).overcome && !target.overcome;
 
       setReviewItems((prev) =>
         prev.map((item) => {
           if (item.id !== itemId) return item;
-          targetSubjectId = item.subjectId;
-          const next = calculateNextReview(today, understanding, item.reviewStage, isCorrect);
-          wasOvercome = next.overcome && !item.overcome;
+          const next = calculateNextReview(today, understanding, item.reviewStage, isCorrect, settings.examDate);
           return {
             ...item,
             understanding,
@@ -416,14 +430,14 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
       setReviewAttempts((prev) => [attempt, ...prev]);
 
       // Award XP for completing a review problem
-      awardXp("review_problem", `review_att_${attempt.id}`, targetSubjectId);
+      awardXp("review_problem", `review_att_${itemId}_${today}`, targetSubjectId);
 
       // Extra bonus if candidate overcame repeated mistake
       if (wasOvercome) {
         awardXp("repeat_mistake_overcome", `overcome_${itemId}_${today}`, targetSubjectId);
       }
     },
-    [awardXp]
+    [awardXp, reviewItems, settings.examDate]
   );
 
   const saveNote = useCallback((note: HandwrittenNote) => {
@@ -445,29 +459,30 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const unlockDecoration = useCallback((id: string): boolean => {
-    let success = false;
+    const target = village.decorations.find(d => d.id === id);
+    if (!target || target.unlocked || village.coins < target.costXp) return false;
     setVillage((prev) => {
       const target = prev.decorations.find((d) => d.id === id);
       if (!target || target.unlocked) return prev;
       if (prev.coins < target.costXp) return prev; // Not enough coins/xp
 
-      success = true;
       soundManager.playLevelUp();
+      const free = Array.from({length:18}, (_,i)=>({x:i%6,y:Math.floor(i/6)})).find(pos=>!prev.decorations.some(d=>d.unlocked && d.x===pos.x && d.y===pos.y));
+      if (!free) return prev;
+      const occupied = prev.decorations.some(d=>d.unlocked && d.x===target.x && d.y===target.y);
       return {
         ...prev,
         coins: prev.coins - target.costXp,
-        decorations: prev.decorations.map((d) => (d.id === id ? { ...d, unlocked: true } : d)),
+        decorations: prev.decorations.map((d) => (d.id === id ? { ...d, ...(occupied ? free : {}), unlocked: true } : d)),
         recentUnlocks: [`${target.name} 잠금 해제!`, ...prev.recentUnlocks.slice(0, 4)],
       };
     });
-    return success;
-  }, []);
+    return true;
+  }, [village]);
 
   const moveDecoration = useCallback((id: string, x: number, y: number) => {
-    setVillage((prev) => ({
-      ...prev,
-      decorations: prev.decorations.map((d) => (d.id === id ? { ...d, x, y } : d)),
-    }));
+    if (!Number.isInteger(x) || !Number.isInteger(y) || x<0 || x>5 || y<0 || y>2) return;
+    setVillage(prev => prev.decorations.some(d=>d.unlocked && d.id!==id && d.x===x && d.y===y) ? prev : ({...prev, decorations: prev.decorations.map(d=>d.id===id && d.unlocked ? {...d,x,y} : d)}));
     soundManager.playPop();
   }, []);
 
@@ -493,11 +508,11 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const buyMiniroomItem = useCallback((id: string): boolean => {
-    let success = false;
+    const target = village.miniroomItems.find(d => d.id === id);
+    if (!target || target.unlocked || village.coins < target.costBells) return false;
     setVillage((prev) => {
       const item = (prev.miniroomItems || []).find((i) => i.id === id);
       if (!item || item.unlocked || prev.coins < item.costBells) return prev;
-      success = true;
       soundManager.playLevelUp();
       return {
         ...prev,
@@ -508,15 +523,15 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
         recentUnlocks: [`${item.name} 가구 구매!`, ...prev.recentUnlocks.slice(0, 4)],
       };
     });
-    return success;
-  }, []);
+    return true;
+  }, [village]);
 
   const buyWardrobeItem = useCallback((id: string): boolean => {
-    let success = false;
+    const target = village.wardrobe.find(d => d.id === id);
+    if (!target || target.unlocked || village.coins < target.costBells) return false;
     setVillage((prev) => {
       const item = (prev.wardrobe || []).find((w) => w.id === id);
       if (!item || item.unlocked || prev.coins < item.costBells) return prev;
-      success = true;
       soundManager.playLevelUp();
       return {
         ...prev,
@@ -527,10 +542,11 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
         recentUnlocks: [`${item.name} 의상 구매!`, ...prev.recentUnlocks.slice(0, 4)],
       };
     });
-    return success;
-  }, []);
+    return true;
+  }, [village]);
 
   const equipOutfit = useCallback((id: string) => {
+    if (!village.wardrobe.some(item => item.id === id && item.unlocked)) return;
     setVillage((prev) => ({
       ...prev,
       equippedOutfit: id,
@@ -540,7 +556,7 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
       equippedOutfit: id,
     }));
     soundManager.playChime();
-  }, []);
+  }, [village]);
 
   const moveAvatar = useCallback((x: number, y: number) => {
     const clampedX = Math.max(10, Math.min(90, x));
@@ -611,6 +627,7 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
       settings,
       schedules,
       todayPlan,
+      planHistory,
       sessions,
       reviewItems,
       reviewAttempts,
@@ -624,6 +641,7 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
     settings,
     schedules,
     todayPlan,
+    planHistory,
     sessions,
     reviewItems,
     reviewAttempts,
@@ -636,16 +654,21 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
   const importBackup = useCallback((jsonStr: string): boolean => {
     try {
       const parsed = JSON.parse(jsonStr);
-      if (parsed.settings) setSettings(parsed.settings);
+      if (!parsed || typeof parsed !== "object" || !parsed.settings || !parsed.todayPlan?.subjects || !Array.isArray(parsed.sessions) || !Array.isArray(parsed.reviewItems) || !Array.isArray(parsed.notes) || !parsed.village?.buildings) return false;
+      if (parsed.settings) setSettings({...initialUserSettings, ...parsed.settings});
       if (parsed.schedules) setSchedules(parsed.schedules);
-      if (parsed.todayPlan) setTodayPlan(parsed.todayPlan);
+      if (parsed.planHistory) setPlanHistory(parsed.planHistory);
+      if (parsed.todayPlan.date === getTodayDateString()) setTodayPlan(parsed.todayPlan);
+      else { setPlanHistory(prev => ({...prev, [parsed.todayPlan.date]: parsed.todayPlan})); setTodayPlan(getInitialTodayPlan()); }
       if (parsed.sessions) setSessions(parsed.sessions);
       if (parsed.reviewItems) setReviewItems(parsed.reviewItems);
       if (parsed.reviewAttempts) setReviewAttempts(parsed.reviewAttempts);
       if (parsed.notes) setNotes(parsed.notes);
-      if (parsed.village) setVillage(parsed.village);
+      if (parsed.village) setVillage({...initialVillageState, ...parsed.village});
       if (parsed.aiMessages) setAiMessages(parsed.aiMessages);
-      if (parsed.xpTransactions) setXpTransactions(parsed.xpTransactions);
+      if (parsed.xpTransactions) { setXpTransactions(parsed.xpTransactions); xpKeys.current = new Set(parsed.xpTransactions.map((t: XpTransaction) => t.idempotencyKey)); }
+      loadFailed.current = false;
+      setStorageError("");
       soundManager.playLevelUp();
       return true;
     } catch (e) {
@@ -656,15 +679,18 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
 
   const resetAllData = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
+    loadFailed.current = false;
+    xpKeys.current.clear();
+    setPlanHistory({});
     setSettings(initialUserSettings);
-    setSchedules(initialSchedules);
+    setSchedules([]);
     setTodayPlan(getInitialTodayPlan());
-    setSessions(initialSessions);
-    setReviewItems(initialReviewItems);
+    setSessions([]);
+    setReviewItems([]);
     setReviewAttempts([]);
-    setNotes(initialNotes);
+    setNotes([]);
     setVillage(initialVillageState);
-    setAiMessages(initialAiMessages);
+    setAiMessages([]);
     setXpTransactions([]);
     soundManager.playPop();
   }, []);
@@ -672,9 +698,11 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
   const contextValue = useMemo(
     () => ({
       isLoaded,
+      storageError,
       settings,
       schedules,
       todayPlan,
+      planHistory,
       sessions,
       reviewItems,
       reviewAttempts,
@@ -714,9 +742,11 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
     }),
     [
       isLoaded,
+      storageError,
       settings,
       schedules,
       todayPlan,
+      planHistory,
       sessions,
       reviewItems,
       reviewAttempts,
