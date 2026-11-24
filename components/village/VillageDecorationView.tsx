@@ -1,25 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useForestStore } from "@/lib/store";
-import { SUBJECTS, XP_REWARDS } from "@/lib/constants";
+import { SUBJECTS } from "@/lib/constants";
 import { SubjectId, VillageDecorationItem } from "@/lib/types";
 import { AnimalAvatar } from "./AnimalAvatar";
 import { BuildingIllustration } from "./BuildingIllustration";
 import { soundManager } from "@/lib/sounds";
 import {
-  Trees,
   Sparkles,
   Coins,
-  ShieldCheck,
-  Award,
-  ChevronRight,
   Heart,
   Store,
   MapPin,
-  Lock,
-  Unlock,
   CheckCircle2,
+  Move,
+  X,
+  Compass,
+  ArrowRight,
 } from "lucide-react";
 
 export function VillageDecorationView() {
@@ -27,9 +25,69 @@ export function VillageDecorationView() {
 
   const [selectedBuilding, setSelectedBuilding] = useState<SubjectId | null>("criminal_law");
   const [selectedDecoration, setSelectedDecoration] = useState<VillageDecorationItem | null>(null);
+  const [isMoveMode, setIsMoveMode] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const mapRef = useRef<HTMLDivElement>(null);
 
   const buildings = village.buildings;
   const characters = village.characters;
+
+  // Grid dimensions for Village Plaza: 6 columns (0 to 5) x 3 rows (0 to 2)
+  const GRID_COLS = 6;
+  const GRID_ROWS = 3;
+
+  // Find decoration at specific coordinates
+  const getDecorationAt = (x: number, y: number) => {
+    return village.decorations.find((d) => d.unlocked && d.x === x && d.y === y);
+  };
+
+  const handleSelectDecoration = (item: VillageDecorationItem) => {
+    setSelectedDecoration(item);
+    setIsMoveMode(false);
+    soundManager.playPop();
+
+    // Scroll smoothly to the map so the user clearly sees where it's located
+    if (mapRef.current) {
+      mapRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    if (item.unlocked) {
+      setStatusMessage(`📍 [${item.name}] 위치를 지도에서 확인했습니다! (${item.x + 1}열, ${item.y + 1}행)`);
+    } else {
+      setStatusMessage(`🔒 [${item.name}]은(는) 아직 잠겨 있습니다. 상점에서 해금 후 배치할 수 있어요!`);
+    }
+    setTimeout(() => setStatusMessage(null), 3500);
+  };
+
+  const handleTileClick = (x: number, y: number) => {
+    const existing = getDecorationAt(x, y);
+
+    // If in Move Mode and user taps an empty tile
+    if (isMoveMode && selectedDecoration) {
+      if (existing && existing.id !== selectedDecoration.id) {
+        alert("해당 타일에는 이미 다른 장식이 배치되어 있습니다. 빈 타일을 선택해 주세요!");
+        return;
+      }
+
+      moveDecoration(selectedDecoration.id, x, y);
+      setIsMoveMode(false);
+      soundManager.playChime();
+      setStatusMessage(`🌸 [${selectedDecoration.name}] 위치를 (${x + 1}열, ${y + 1}행)으로 이동했습니다!`);
+      setTimeout(() => setStatusMessage(null), 3000);
+      return;
+    }
+
+    // Normal click on a placed item
+    if (existing) {
+      handleSelectDecoration(existing);
+    } else {
+      // Clicked on empty tile
+      setSelectedDecoration(null);
+      setIsMoveMode(false);
+      soundManager.playClick();
+    }
+  };
 
   const handleUnlockItem = (item: VillageDecorationItem) => {
     if (village.coins < item.costXp) {
@@ -39,12 +97,14 @@ export function VillageDecorationView() {
     const success = unlockDecoration(item.id);
     if (success) {
       soundManager.playLevelUp();
+      setStatusMessage(`🎉 [${item.name}] 잠금 해제 완료! 지도에 배치되었습니다.`);
+      setTimeout(() => setStatusMessage(null), 3000);
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* 1. Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-3xl border border-forest-border shadow-soft">
         <div>
           <div className="flex items-center gap-2">
@@ -54,7 +114,7 @@ export function VillageDecorationView() {
             </span>
           </div>
           <p className="text-xs text-forest-text-muted mt-0.5">
-            공부와 복습을 진행할수록 건물이 증축되고, 나만의 따뜻한 경찰 마을을 꾸밀 수 있습니다.
+            지도의 장식 타일을 클릭하여 위치를 확인하고, 자유롭게 원하는 곳으로 이동시켜 보세요.
           </p>
         </div>
 
@@ -77,37 +137,91 @@ export function VillageDecorationView() {
           <Heart className="w-5 h-5 fill-emerald-500" />
         </div>
         <div className="text-xs text-emerald-950">
-          <div className="font-bold text-sm mb-0.5">
-            지치지 않는 합격의 숲 평화 원칙 🌱
-          </div>
+          <div className="font-bold text-sm mb-0.5">지치지 않는 합격의 숲 평화 원칙 🌱</div>
           <p className="leading-relaxed text-emerald-800">
-            공부를 며칠 쉬어가더라도 캐릭터가 시들거나 건물이 퇴화하지 않으며, 출석 스트레스를 주지
-            않습니다. 바쁜 날 60분 최소 목표만 달성해도 주민들이 감사 인사를 전해요!
+            공부를 며칠 쉬어가더라도 캐릭터가 시들거나 건물이 퇴화하지 않으며, 출석 스트레스를 주지 않습니다.
+            바쁜 날 60분 최소 목표만 달성해도 주민들이 감사 인사를 전해요!
           </p>
         </div>
       </div>
 
-      {/* 1. INTERACTIVE VILLAGE MAP */}
-      <div className="bg-[#FAF7F2] rounded-3xl p-6 sm:p-8 border-2 border-dashed border-forest-border shadow-soft relative overflow-hidden">
-        {/* Soft decorative background paths and grass dots */}
-        <div className="absolute inset-0 opacity-20 pointer-events-none bg-[radial-gradient(#C76D91_1px,transparent_1px)] [background-size:24px_24px]" />
+      {/* Floating Status / Action Feedback Toast */}
+      {statusMessage && (
+        <div className="p-3.5 rounded-2xl bg-forest-pink text-white text-xs font-bold shadow-cute animate-in fade-in slide-in-from-top-2 duration-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>{statusMessage}</span>
+          </div>
+          <button onClick={() => setStatusMessage(null)} className="p-1 hover:opacity-80">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
-        <div className="relative z-10 space-y-6">
-          <div className="text-center space-y-1">
-            <span className="text-xs font-bold px-3 py-1 rounded-full bg-white text-forest-text-muted border border-forest-border">
-              {settings.villageName} 전경
-            </span>
-            <h2 className="text-lg font-black text-forest-text">
-              과목별 3대 건물 & 캐릭터 거주지
-            </h2>
+      {/* 2. INTERACTIVE VILLAGE MAP CONTAINER */}
+      <div
+        ref={mapRef}
+        className="bg-[#FAF7F2] rounded-3xl p-5 sm:p-7 border-2 border-dashed border-forest-border shadow-soft space-y-6 relative overflow-hidden"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-forest-border/80 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Compass className="w-5 h-5 text-forest-pink-dark" />
+              <h2 className="text-base sm:text-lg font-black text-forest-text">
+                {settings.villageName} 인터랙티브 지도
+              </h2>
+            </div>
+            <p className="text-xs text-forest-text-muted mt-0.5">
+              {isMoveMode
+                ? "🚀 이동 모드 활성화 중: 장식을 옮기고 싶은 지도의 빈 잔디 타일을 터치하세요!"
+                : "타일의 장식을 클릭하면 세부 정보와 위치가 표시되며, 원하는 위치로 이동할 수 있습니다."}
+            </p>
           </div>
 
-          {/* 3 Major Buildings Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {selectedDecoration && selectedDecoration.unlocked && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setIsMoveMode(!isMoveMode);
+                  soundManager.playClick();
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all btn-bubbly ${
+                  isMoveMode
+                    ? "bg-amber-400 text-amber-950 shadow-md ring-2 ring-amber-300"
+                    : "bg-forest-pink text-white shadow-sm hover:bg-forest-pink-dark"
+                }`}
+              >
+                <Move className="w-3.5 h-3.5" />
+                <span>{isMoveMode ? "이동 취소" : "위치 이동하기"}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelectedDecoration(null);
+                  setIsMoveMode(false);
+                }}
+                className="p-1.5 rounded-xl text-forest-text-muted hover:bg-white border border-forest-border text-xs"
+                title="선택 해제"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* TOP: 3 Major Subject Buildings Row */}
+        <div>
+          <div className="text-[11px] font-bold text-forest-text-muted mb-2 flex items-center gap-1">
+            <span>🏛️ 마을의 3대 과목 중심 건물</span>
+            <span className="text-[10px] text-forest-pink-dark font-normal">
+              (클릭 시 캐릭터 대화 및 증축 현황 확인)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {(["criminal_law", "police_studies", "constitution"] as SubjectId[]).map((subId) => {
               const b = buildings[subId];
               const c = characters[subId];
-              const sub = SUBJECTS[subId];
               const isSelected = selectedBuilding === subId;
 
               return (
@@ -117,91 +231,185 @@ export function VillageDecorationView() {
                     setSelectedBuilding(subId);
                     soundManager.playPop();
                   }}
-                  className={`cursor-pointer rounded-3xl p-5 border-2 transition-all flex flex-col items-center text-center btn-bubbly ${
+                  className={`cursor-pointer rounded-2xl p-4 border-2 transition-all flex flex-col items-center text-center btn-bubbly ${
                     isSelected
-                      ? "bg-white border-forest-pink shadow-cute scale-102 ring-2 ring-forest-pink/30"
-                      : "bg-white/80 border-forest-border hover:bg-white hover:border-forest-pink/60 shadow-soft"
+                      ? "bg-white border-forest-pink shadow-cute ring-2 ring-forest-pink/30"
+                      : "bg-white/80 border-forest-border hover:bg-white hover:border-forest-pink/60 shadow-xs"
                   }`}
                 >
-                  {/* Building Graphic */}
                   <BuildingIllustration
                     buildingId={subId}
                     level={b.level}
-                    className="w-32 h-32 mb-2"
+                    className="w-24 h-24 mb-1"
                   />
-
-                  {/* Animal Character & Dialogue Bubble */}
-                  <div className="relative my-2">
-                    <AnimalAvatar subjectId={subId} size="lg" mood={c.mood} />
-                    <div className="absolute -top-3 -right-6 bg-white px-2 py-0.5 rounded-full border border-forest-border shadow-xs text-[10px] font-bold text-forest-pink-dark">
-                      Lv.{b.level}
-                    </div>
+                  <div className="relative my-1">
+                    <AnimalAvatar subjectId={subId} size="md" mood={c.mood} />
+                    <span className="absolute -top-2 -right-4 bg-white px-1.5 py-0.2 rounded-full border border-forest-border text-[9px] font-bold text-forest-pink-dark">
+                      ★{b.level}
+                    </span>
                   </div>
+                  <div className="font-black text-xs text-forest-text">{b.name}</div>
+                  <div className="text-[10px] text-forest-text-muted">{c.name}</div>
 
-                  <div className="font-black text-sm text-forest-text mt-1">{b.name}</div>
-                  <div className="text-[11px] text-forest-text-muted">
-                    {c.name} · {c.outfit}
-                  </div>
-
-                  {/* Speech bubble */}
-                  <div className="mt-3 bg-forest-warm/60 p-2.5 rounded-2xl border border-forest-border/80 text-[11px] text-forest-text italic leading-snug">
+                  <div className="mt-2 bg-forest-warm/60 p-2 rounded-xl text-[10px] text-forest-text italic leading-tight w-full">
                     "{c.dialogue}"
-                  </div>
-
-                  {/* Building Progress */}
-                  <div className="w-full mt-3 pt-2 border-t border-forest-border/50 text-left text-[10px]">
-                    <div className="flex justify-between text-forest-text-muted mb-1">
-                      <span>건물 증축 진도</span>
-                      <span className="font-bold">{b.xp % 100}/100 XP</span>
-                    </div>
-                    <div className="w-full bg-forest-border rounded-full h-1.5">
-                      <div
-                        className="bg-forest-pink h-full rounded-full transition-all"
-                        style={{ width: `${b.xp % 100}%` }}
-                      />
-                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
+        </div>
 
-          {/* Placed Village Decorations Section */}
-          <div className="pt-4 border-t border-forest-border/60">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-forest-text-muted">
-                마을에 배치된 조경 장식들
-              </span>
-              <span className="text-xs text-forest-pink-dark font-bold">
-                클릭하여 장식 위치 확인
-              </span>
+        {/* BOTTOM: INTERACTIVE VILLAGE PLAZA TILE GRID (6 cols x 3 rows) */}
+        <div className="space-y-2 pt-2">
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] font-bold text-forest-text-muted flex items-center gap-1.5">
+              <span>🌿 마을 공원 조경 타일 지도 (6 × 3)</span>
+              {isMoveMode && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold animate-pulse">
+                  이동할 빈 타일을 터치하세요!
+                </span>
+              )}
             </div>
+            {selectedDecoration && (
+              <span className="text-xs font-bold text-forest-pink-dark flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5" />
+                <span>
+                  선택된 장식: {selectedDecoration.name} ({selectedDecoration.x + 1}열,{" "}
+                  {selectedDecoration.y + 1}행)
+                </span>
+              </span>
+            )}
+          </div>
 
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-              {village.decorations.map((dec) => (
-                <div
-                  key={dec.id}
-                  className={`rounded-2xl p-3 text-center border transition-all ${
-                    dec.unlocked
-                      ? "bg-white border-forest-border shadow-soft"
-                      : "bg-forest-warm/30 border-dashed border-forest-border/80 opacity-60"
-                  }`}
-                >
-                  <div className="w-16 h-16 mx-auto flex items-center justify-center">
-                    <BuildingIllustration buildingId={dec.type as any} className="w-14 h-14" />
+          {/* Grid Layout */}
+          <div className="bg-[#E4EFE0] p-3 rounded-2xl border-2 border-[#BCD1B6] grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+            {Array.from({ length: GRID_ROWS }).map((_, rowIndex) =>
+              Array.from({ length: GRID_COLS }).map((_, colIndex) => {
+                const item = getDecorationAt(colIndex, rowIndex);
+                const isSelected = selectedDecoration?.id === item?.id;
+                const canMoveHere = isMoveMode && !item;
+
+                return (
+                  <div
+                    key={`${colIndex}-${rowIndex}`}
+                    onClick={() => handleTileClick(colIndex, rowIndex)}
+                    className={`relative h-24 rounded-2xl p-1.5 flex flex-col items-center justify-center transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-white border-2 border-forest-pink shadow-cute ring-4 ring-forest-pink/40 scale-105 z-20 animate-pulse"
+                        : item
+                        ? "bg-[#F3FAF0] border border-[#BCD1B6] hover:bg-white hover:border-forest-pink/60 hover:shadow-sm"
+                        : canMoveHere
+                        ? "bg-amber-50 border-2 border-dashed border-amber-400 hover:bg-amber-100/80 animate-pulse"
+                        : "bg-[#D8E8D2]/60 border border-dashed border-[#BCD1B6]/70 hover:bg-[#EAF4E8]"
+                    }`}
+                  >
+                    {/* Coordinate indicator in corner */}
+                    <span className="absolute top-1 left-1.5 text-[8px] font-bold text-forest-text-muted/60">
+                      {colIndex + 1},{rowIndex + 1}
+                    </span>
+
+                    {item ? (
+                      <>
+                        {/* Selected Beacon Pin */}
+                        {isSelected && (
+                          <div className="absolute -top-2.5 z-30 flex items-center gap-0.5 bg-forest-pink text-white px-1.5 py-0.5 rounded-full text-[9px] font-black shadow-md animate-bounce">
+                            <MapPin className="w-2.5 h-2.5" />
+                            <span>위치 확인!</span>
+                          </div>
+                        )}
+
+                        <div className="w-12 h-12 flex items-center justify-center mb-0.5">
+                          <BuildingIllustration
+                            buildingId={item.type as any}
+                            className="w-11 h-11"
+                          />
+                        </div>
+                        <span className="text-[10px] font-bold text-forest-text leading-tight truncate max-w-full text-center">
+                          {item.name}
+                        </span>
+                      </>
+                    ) : canMoveHere ? (
+                      <div className="text-center text-amber-800 space-y-0.5">
+                        <Move className="w-4 h-4 mx-auto animate-bounce" />
+                        <span className="text-[9px] font-bold block">여기로 이동</span>
+                      </div>
+                    ) : (
+                      <div className="text-center opacity-40">
+                        <span className="text-[12px]">🌱</span>
+                        <span className="text-[8px] block text-forest-text-muted">빈 타일</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs font-bold text-forest-text mt-1">{dec.name}</div>
-                  <div className="text-[10px] text-forest-text-muted">
-                    {dec.unlocked ? "배치 완료" : `${dec.costXp} 벨 필요`}
-                  </div>
-                </div>
-              ))}
-            </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
 
-      {/* 2. DECORATION SHOP & UNLOCKS */}
+      {/* 3. PLACED DECORATIONS LIST (CLICKABLE WITH CLEAR POSITION HIGHLIGHT) */}
+      <div className="bg-white rounded-3xl p-6 border border-forest-border shadow-soft space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-forest-pink-dark" />
+            <h3 className="text-base font-bold text-forest-text">마을에 배치된 조경 장식들</h3>
+          </div>
+          <span className="text-xs text-forest-pink-dark font-bold">
+            💡 카드를 클릭하면 지도에서 위치가 반짝이며 표시됩니다!
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {village.decorations.map((dec) => {
+            const isSelected = selectedDecoration?.id === dec.id;
+
+            return (
+              <div
+                key={dec.id}
+                onClick={() => handleSelectDecoration(dec)}
+                className={`cursor-pointer rounded-2xl p-3 text-center border-2 transition-all btn-bubbly flex flex-col justify-between ${
+                  isSelected
+                    ? "bg-forest-pink/20 border-forest-pink shadow-cute ring-2 ring-forest-pink/40 scale-102"
+                    : dec.unlocked
+                    ? "bg-white border-forest-border hover:border-forest-pink/60 shadow-soft"
+                    : "bg-forest-warm/30 border-dashed border-forest-border/80 opacity-70"
+                }`}
+              >
+                <div>
+                  <div className="w-14 h-14 mx-auto flex items-center justify-center">
+                    <BuildingIllustration buildingId={dec.type as any} className="w-12 h-12" />
+                  </div>
+                  <div className="text-xs font-bold text-forest-text mt-1 truncate">{dec.name}</div>
+                </div>
+
+                <div className="mt-2 pt-1 border-t border-forest-border/50">
+                  {dec.unlocked ? (
+                    <div className="space-y-1">
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-forest-pink-dark bg-white px-1.5 py-0.5 rounded-full border border-forest-border">
+                        <MapPin className="w-2.5 h-2.5" />
+                        <span>
+                          {dec.x + 1}열 {dec.y + 1}행
+                        </span>
+                      </span>
+                      <div className="text-[9px] text-forest-text-muted">
+                        {isSelected ? "📍 지도에서 확인 중" : "클릭하여 위치 확인"}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-amber-700 font-semibold flex items-center justify-center gap-1">
+                      <Coins className="w-3 h-3 text-amber-500" />
+                      <span>{dec.costXp} 벨 필요</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 4. DECORATION SHOP & UNLOCKS */}
       <div className="bg-white rounded-3xl p-6 border border-forest-border shadow-soft space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -209,7 +417,7 @@ export function VillageDecorationView() {
             <h3 className="text-base font-bold text-forest-text">마을 상점 (보상 해금)</h3>
           </div>
           <span className="text-xs text-forest-text-muted">
-            학습으로 획득한 벨로 마을을 아기자기하게 꾸며보세요.
+            학습으로 획득한 벨로 새로운 조경 장식을 구매하고 마을을 가꿔보세요.
           </span>
         </div>
 
@@ -237,10 +445,13 @@ export function VillageDecorationView() {
               </div>
 
               {item.unlocked ? (
-                <span className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center gap-1">
+                <button
+                  onClick={() => handleSelectDecoration(item)}
+                  className="px-2.5 py-1 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1 transition-colors"
+                >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>보유 중</span>
-                </span>
+                  <span>배치 확인</span>
+                </button>
               ) : (
                 <button
                   onClick={() => handleUnlockItem(item)}

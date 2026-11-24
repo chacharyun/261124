@@ -115,7 +115,17 @@ export function ForestStoreProvider({ children }: { children: React.ReactNode })
         if (parsed.reviewItems) setReviewItems(parsed.reviewItems);
         if (parsed.reviewAttempts) setReviewAttempts(parsed.reviewAttempts);
         if (parsed.notes) setNotes(parsed.notes);
-        if (parsed.village) setVillage(parsed.village);
+        if (parsed.village) {
+          const normalizedDecs = parsed.village.decorations?.map((d: any) => ({
+            ...d,
+            x: Math.min(5, Math.max(0, typeof d.x === "number" ? d.x : 0)),
+            y: Math.min(2, Math.max(0, typeof d.y === "number" ? d.y : 0)),
+          })) || initialVillageState.decorations;
+          setVillage({
+            ...parsed.village,
+            decorations: normalizedDecs,
+          });
+        }
         if (parsed.aiMessages) setAiMessages(parsed.aiMessages);
         if (parsed.xpTransactions) setXpTransactions(parsed.xpTransactions);
       }

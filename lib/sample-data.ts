@@ -273,12 +273,12 @@ export const initialVillageState: VillageState = {
     },
   },
   decorations: [
-    { id: "dec-1", type: "cherry_tree", name: "벚꽃나무", x: 1, y: 1, unlocked: true, costXp: 20 },
-    { id: "dec-2", type: "flower_bed", name: "합격 튤립 꽃밭", x: 2, y: 2, unlocked: true, costXp: 15 },
-    { id: "dec-3", type: "bench", name: "따스한 원목 벤치", x: 4, y: 2, unlocked: true, costXp: 25 },
-    { id: "dec-4", type: "street_lamp", name: "야간 가로등", x: 5, y: 1, unlocked: true, costXp: 30 },
-    { id: "dec-5", type: "fountain", name: "중앙 순경 분수대", x: 3, y: 3, unlocked: false, costXp: 80 },
-    { id: "dec-6", type: "bookshelf", name: "야외 책장", x: 6, y: 3, unlocked: false, costXp: 50 },
+    { id: "dec-1", type: "cherry_tree", name: "벚꽃나무", x: 0, y: 0, unlocked: true, costXp: 20 },
+    { id: "dec-2", type: "flower_bed", name: "합격 튤립 꽃밭", x: 2, y: 0, unlocked: true, costXp: 15 },
+    { id: "dec-3", type: "bench", name: "따스한 원목 벤치", x: 4, y: 1, unlocked: true, costXp: 25 },
+    { id: "dec-4", type: "street_lamp", name: "야간 가로등", x: 5, y: 0, unlocked: true, costXp: 30 },
+    { id: "dec-5", type: "fountain", name: "중앙 순경 분수대", x: 2, y: 1, unlocked: false, costXp: 80 },
+    { id: "dec-6", type: "bookshelf", name: "야외 책장", x: 1, y: 2, unlocked: false, costXp: 50 },
   ],
   recentUnlocks: ["형사법 도서관 2층 증축", "벚꽃나무 장식"],
 };

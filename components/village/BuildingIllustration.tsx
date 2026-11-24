@@ -217,6 +217,26 @@ export function BuildingIllustration({ buildingId, level = 1, className = "" }: 
     );
   }
 
+  if (buildingId === "bookshelf") {
+    return (
+      <div className={`relative inline-block ${className}`}>
+        <svg viewBox="0 0 100 100" className="w-full h-full">
+          <ellipse cx="50" cy="85" rx="35" ry="8" fill="#000" opacity="0.1" />
+          <rect x="25" y="20" width="50" height="65" rx="4" fill="#D7BEA8" stroke="#A47E5B" strokeWidth="2" />
+          <line x1="25" y1="40" x2="75" y2="40" stroke="#A47E5B" strokeWidth="2" />
+          <line x1="25" y1="60" x2="75" y2="60" stroke="#A47E5B" strokeWidth="2" />
+          {/* Books */}
+          <rect x="30" y="26" width="6" height="14" fill="#F38BA8" rx="1" />
+          <rect x="37" y="24" width="7" height="16" fill="#89B4FA" rx="1" />
+          <rect x="45" y="27" width="5" height="13" fill="#A6E3A1" rx="1" />
+          <rect x="32" y="46" width="7" height="14" fill="#F9E2AF" rx="1" />
+          <rect x="40" y="44" width="8" height="16" fill="#CBA6F7" rx="1" />
+          <rect x="49" y="47" width="6" height="13" fill="#FAB387" rx="1" />
+        </svg>
+      </div>
+    );
+  }
+
   // Fountain
   return (
     <div className={`relative inline-block ${className}`}>
