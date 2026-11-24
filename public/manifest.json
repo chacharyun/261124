@@ -1,0 +1,16 @@
+{
+  "name": "합격의 숲 — 나의 경찰 마을",
+  "short_name": "합격의숲",
+  "description": "2027년 3월 20일 경찰공무원 순경 필기시험 대비 올인원 학습 관리 및 성장 게임",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFF8F5",
+  "theme_color": "#F3B8CC",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

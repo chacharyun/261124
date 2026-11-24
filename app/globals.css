@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  background-color: #FFF8F5;
+  color: #51454A;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Custom soft bubbly scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FFF2EB;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb {
+  background: #F3B8CC;
+  border-radius: 9999px;
+  border: 2px solid #FFF2EB;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C76D91;
+}
+
+/* Gentle animation utilities */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(243, 184, 204, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(243, 184, 204, 0.8);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 3s ease-in-out 1.5s infinite;
+}
+
+.glow-pink {
+  animation: pulseGlow 2.5s infinite;
+}
+
+/* Canvas handwriting styles: prevent Safari elastic drag and gesture conflict */
+.canvas-container {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Animal Crossing style button press effect */
+.btn-bubbly {
+  transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.btn-bubbly:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+.btn-bubbly:active {
+  transform: translateY(1px) scale(0.98);
+}
