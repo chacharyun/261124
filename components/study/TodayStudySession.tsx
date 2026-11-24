@@ -163,6 +163,13 @@ export function TodayStudySession({
     setSeconds(0);
     setAttemptedCount(0);
     setCorrectCount(0);
+    setCurrentPhase(1);
+    setPhaseDone({ skim: false, input: false, output: false, feedback: false });
+    setSkimChecks([]);
+    setInputChecks([]);
+    setOutputChecks([]);
+    setConfusingConceptText("");
+    setStudyNotes("");
 
     // Play victory sound
     soundManager.playLevelUp();
@@ -182,7 +189,7 @@ export function TodayStudySession({
             <button
               key={subId}
               onClick={() => {
-                if (subId !== selectedSubject && seconds > 0) { alert("현재 공부를 저장하거나 타이머를 초기화한 뒤 과목을 변경해 주세요."); return; }
+                if (subId !== selectedSubject && (seconds > 0 || timerRunning)) { alert("현재 공부를 저장하거나 타이머를 초기화한 뒤 과목을 변경해 주세요."); return; }
                 setSelectedSubject(subId);
                 soundManager.playClick();
               }}

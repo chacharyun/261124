@@ -45,6 +45,7 @@ export function SpacedReviewLibrary({ onNavigateToMistakes }: { onNavigateToMist
 
   // Active drill state
   const [isDrillActive, setIsDrillActive] = useState(false);
+  const [drillItems, setDrillItems] = useState<ReviewItem[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [userSelectedChoice, setUserSelectedChoice] = useState<string | null>(null);
   const [isSolutionRevealed, setIsSolutionRevealed] = useState(false);
@@ -91,10 +92,11 @@ export function SpacedReviewLibrary({ onNavigateToMistakes }: { onNavigateToMist
     return list.slice(0, batchSize);
   }, [reviewItems, selectedMode, batchSize, todayStr]);
 
-  const currentItem = filteredItems[currentIdx];
+  const currentItem = drillItems[currentIdx];
 
   const startDrill = () => {
     if (filteredItems.length === 0) return;
+    setDrillItems([...filteredItems]);
     setIsDrillActive(true);
     setCurrentIdx(0);
     setUserSelectedChoice(null);
@@ -119,7 +121,7 @@ export function SpacedReviewLibrary({ onNavigateToMistakes }: { onNavigateToMist
     }));
 
     // Next item or complete drill
-    if (currentIdx + 1 < filteredItems.length) {
+    if (currentIdx + 1 < drillItems.length) {
       setCurrentIdx((prev) => prev + 1);
       setUserSelectedChoice(null);
       setIsSolutionRevealed(false);
@@ -289,7 +291,7 @@ export function SpacedReviewLibrary({ onNavigateToMistakes }: { onNavigateToMist
 
             <div className="flex items-center gap-3">
               <span className="text-xs font-black text-forest-pink-dark">
-                {currentIdx + 1} / {filteredItems.length} 문항
+                {currentIdx + 1} / {drillItems.length} 문항
               </span>
               <button
                 onClick={() => setIsDrillActive(false)}
@@ -446,7 +448,7 @@ export function SpacedReviewLibrary({ onNavigateToMistakes }: { onNavigateToMist
       )}
 
       {/* DRILL COMPLETED SUMMARY */}
-      {drillCompleted && (
+      {isDrillActive && drillCompleted && (
         <div className="bg-white rounded-3xl border border-forest-border p-8 shadow-soft text-center space-y-5 animate-in zoom-in-95 duration-200">
           <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl mx-auto shadow-cute">
             🎉
@@ -455,14 +457,14 @@ export function SpacedReviewLibrary({ onNavigateToMistakes }: { onNavigateToMist
           <div className="space-y-1">
             <h2 className="text-xl font-black text-forest-text">복습 세션 완료!</h2>
             <p className="text-xs text-forest-text-muted">
-              총 {filteredItems.length}문제를 성실히 복습했습니다. 기억의 주기가 최적화되었어요!
+              총 {drillItems.length}문제를 성실히 복습했습니다. 기억의 주기가 최적화되었어요!
             </p>
           </div>
 
           <div className="flex justify-center gap-6 py-2">
             <div className="text-center">
               <div className="text-2xl font-black text-forest-pink-dark">
-                {filteredItems.length * 2} XP
+                {drillItems.length * 2} XP
               </div>
               <div className="text-xs text-forest-text-muted">획득 경험치</div>
             </div>
